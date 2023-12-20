@@ -54,16 +54,34 @@ public:
         waitKey(0);
 
 
+// Clone the image for working with a copy
+        colour_ct_slice = ct_slice.clone();
+
+        namedWindow("CT slice", WINDOW_AUTOSIZE);
+        imshow("CT slice", colour_ct_slice);
+        setMouseCallback("CT slice", &RegionGrowing::mouseCallback, this);
+        waitKey(0);
+
         // Process each seed point separately
+        vector<Mat> segmented_regions;
         for (size_t i = 0; i < seed_set.size(); ++i)
         {
             Mat segmented_image = regionGrowing(ct_slice, seed_set[i], 255, 2);
-
-            // Display the segmented image for each seed point
-            namedWindow("Segmentation", WINDOW_AUTOSIZE);
-            imshow("Segmentation", segmented_image);
-            waitKey(0);
+            segmented_regions.push_back(segmented_image);
         }
+
+        // Display all segmented regions in one window with different colors
+        Mat all_regions = Mat::zeros(ct_slice.size(), CV_8UC3);
+        for (size_t i = 0; i < seed_set.size(); ++i)
+        {
+            Scalar color(rand() & 255, rand() & 255, rand() & 255);
+            bitwise_or(all_regions, Scalar(0, 0, 0), all_regions, segmented_regions[i] == 255);
+            bitwise_or(all_regions, color, all_regions, segmented_regions[i] == 255);
+        }
+
+        namedWindow("All Segmented Regions", WINDOW_AUTOSIZE);
+        imshow("All Segmented Regions", all_regions);
+        waitKey(0);
 
         destroyAllWindows();
     }
