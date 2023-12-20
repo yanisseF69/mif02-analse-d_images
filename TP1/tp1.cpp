@@ -31,7 +31,22 @@ public:
         // Saturation (si l'image est en couleur)
         cvtColor(ct_slice, ct_slice, COLOR_BGR2HSV);
         // Ajuster la saturation dans le canal HSV si nécessaire
-        // ...
+
+        ///////////////////////////////////////////////////////////////////////////////////////////// ça là c'est super important pour uniformiser les couleurs et rendre les regions plus lisibles pour notre code
+            // Make colors more uniform (adjust saturation uniformly)
+            float saturationFactor = 1.5;  // Adjust as needed
+
+            // Split the image into channels
+            vector<Mat> channels;
+            split(ct_slice, channels);
+
+            // Adjust the saturation channel (index 1 in the HSV color space)
+            channels[1] = channels[1] * saturationFactor;
+
+            // Merge the channels back into the image
+            merge(channels, ct_slice);
+        /////////////////////////////////////////////////////////////////////////////////////////////
+
         cvtColor(ct_slice, ct_slice, COLOR_HSV2BGR);
         
         // Normalisation
@@ -43,8 +58,31 @@ public:
         
         // Seuillage pour la segmentation
         Mat binary_image;
-        threshold(ct_slice, binary_image, 255, 255, THRESH_BINARY);
+        threshold(ct_slice, binary_image, 0, 255, THRESH_BINARY);
         
+        // Adaptive Thresholding
+        adaptiveThreshold(ct_slice, binary_image, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 11, 2);
+
+        // contours des objets - y a du potentiel on doit ameliorer ça        
+        vector<vector<Point>> contours;
+        findContours(binary_image, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+        // Filter out small contours
+        double minContourArea = 100.0;
+        for (const auto& contour : contours) {
+            double area = contourArea(contour);
+            if (area > minContourArea) {
+                // Process the contour
+                drawContours(ct_slice, vector<vector<Point>>{contour}, 0, Scalar(0, 255, 0), 2);
+            }
+        }
+        
+        // Morphological Operations
+        Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
+        morphologyEx(binary_image, binary_image, MORPH_CLOSE, kernel);
+
+
+
         // Clonez l'image pour travailler avec une copie
         colour_ct_slice = ct_slice.clone();
 
