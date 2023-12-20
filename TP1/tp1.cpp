@@ -43,18 +43,9 @@ public:
         
         // Seuillage pour la segmentation
         Mat binary_image;
-        threshold(ct_slice, binary_image, 128, 255, THRESH_BINARY);
+        threshold(ct_slice, binary_image, 255, 255, THRESH_BINARY);
         
         // Clonez l'image pour travailler avec une copie
-        colour_ct_slice = ct_slice.clone();
-
-        namedWindow("CT slice", WINDOW_AUTOSIZE);
-        imshow("CT slice", colour_ct_slice);
-        setMouseCallback("CT slice", &RegionGrowing::mouseCallback, this);
-        waitKey(0);
-
-
-// Clone the image for working with a copy
         colour_ct_slice = ct_slice.clone();
 
         namedWindow("CT slice", WINDOW_AUTOSIZE);
