@@ -13,8 +13,9 @@ private:
     Mat ct_slice;
     Mat colour_ct_slice;
 
+    // TODO : faire du multi threading sur cette fonction car elle prend beaucoup de temps si on augmente k.
     void performKMeansSegmentation(const Mat& input_image, Mat& segmented_image) {
-        int k = 30; // Nombre de clusters (vous pouvez ajuster cela)
+        int k = 15; // Nombre de clusters (vous pouvez ajuster cela)
 
         // Remodeler l'image en un tableau 2D de pixels
         Mat reshaped_image = input_image.reshape(1, input_image.rows * input_image.cols);
@@ -36,10 +37,48 @@ private:
         normalize(segmented_image, segmented_image, 0, 255, NORM_MINMAX);
     }
 
+    Mat regionSplittingAndMerging(const Mat& input_image, const Rect& region, float tolerance) {
+        Mat output = Mat::zeros(input_image.size(), CV_8UC1);
+        Mat region_of_interest = input_image(region);
+
+        if (isHomogeneous(region_of_interest, tolerance)) {
+            // If the region is homogeneous, fill it with the mean intensity
+            output(region) = mean(region_of_interest)[0];
+        } else {
+            // If not, split the region into four quadrants and recursively process them
+            Rect subregions[4];
+            subregions[0] = Rect(region.x, region.y, region.width / 2, region.height / 2);
+            subregions[1] = Rect(region.x + region.width / 2, region.y, region.width / 2, region.height / 2);
+            subregions[2] = Rect(region.x, region.y + region.height / 2, region.width / 2, region.height / 2);
+            subregions[3] = Rect(region.x + region.width / 2, region.y + region.height / 2, region.width / 2, region.height / 2);
+
+            for (int i = 0; i < 4; ++i) {
+                Mat subregion_mask = Mat::zeros(input_image.size(), CV_8UC1);
+                rectangle(subregion_mask, subregions[i], Scalar(255), FILLED);
+
+                Mat subregion_output = regionSplittingAndMerging(input_image, subregions[i], tolerance);
+
+                bitwise_or(output, subregion_output, output, subregion_mask);
+            }
+        }
+
+        return output;
+    }
+
+    bool isHomogeneous(const Mat& region, float tolerance) {
+        Scalar mean_val = mean(region);
+        Mat diff;
+        absdiff(region, mean_val, diff);
+        Scalar diff_mean = mean(diff);
+
+        return (diff_mean[0] <= tolerance);
+    }
+
+
 public:
     RegionGrowing(String image_path)
     {
-        ct_slice = imread(image_path, IMREAD_COLOR);
+        ct_slice = imread(image_path, IMREAD_GRAYSCALE);
 
         if (ct_slice.empty())
         {
@@ -54,7 +93,21 @@ public:
 
         namedWindow("CT slice", WINDOW_AUTOSIZE);
         imshow("CT slice", colour_ct_slice);
-        setMouseCallback("CT slice", &RegionGrowing::mouseCallback, this);
+
+        // Automatically generate seed points at regular intervals
+        int interval = 60; // Adjust the interval based on your preference
+        for (int y = 0; y < ct_slice.rows; y += interval) {
+            for (int x = 0; x < ct_slice.cols; x += interval) {
+                seed_set.push_back(pair<int, int>(x, y));
+            }
+        }
+
+        // Display seed points
+        for (const auto& seed : seed_set) {
+            Scalar color(rand() & 255, rand() & 255, rand() & 255);
+            circle(colour_ct_slice, Point(seed.first, seed.second), 4, color, FILLED);
+        }
+        imshow("CT slice", colour_ct_slice);
         waitKey(0);
 
         // Process each seed point separately
@@ -76,6 +129,13 @@ public:
 
         namedWindow("All Segmented Regions", WINDOW_AUTOSIZE);
         imshow("All Segmented Regions", all_regions);
+        waitKey(0);
+
+        // Apply region splitting and merging on the whole image
+        Mat rsm_result = regionSplittingAndMerging(ct_slice, Rect(0, 0, ct_slice.cols, ct_slice.rows), 10);
+
+        namedWindow("Region Splitting and Merging Result", WINDOW_AUTOSIZE);
+        imshow("Region Splitting and Merging Result", rsm_result);
         waitKey(0);
 
         destroyAllWindows();
