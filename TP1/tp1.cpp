@@ -13,6 +13,29 @@ private:
     Mat ct_slice;
     Mat colour_ct_slice;
 
+    void performKMeansSegmentation(const Mat& input_image, Mat& segmented_image) {
+        int k = 30; // Nombre de clusters (vous pouvez ajuster cela)
+
+        // Remodeler l'image en un tableau 2D de pixels
+        Mat reshaped_image = input_image.reshape(1, input_image.rows * input_image.cols);
+
+        // Convertir en type flottant pour K-means
+        reshaped_image.convertTo(reshaped_image, CV_32F);
+
+        // Clustering K-means
+        Mat labels, centers;
+        kmeans(reshaped_image, k, labels, TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 100, 0.2), 3, KMEANS_RANDOM_CENTERS, centers);
+
+        // Remodeler le résultat à la taille originale de l'image
+        Mat segmented_labels = labels.reshape(0, input_image.rows);
+
+        // Convertir les étiquettes segmentées en 8 bits pour la visualisation
+        segmented_labels.convertTo(segmented_image, CV_8U);
+
+        // Normaliser l'image segmentée dans la plage [0, 255]
+        normalize(segmented_image, segmented_image, 0, 255, NORM_MINMAX);
+    }
+
 public:
     RegionGrowing(String image_path)
     {
@@ -24,64 +47,7 @@ public:
             return; // No return -1; in a constructor
         }
 
-        // Améliorations de l'image
-        // Lissage
-        GaussianBlur(ct_slice, ct_slice, Size(5, 5), 0);
-        
-        // Saturation (si l'image est en couleur)
-        cvtColor(ct_slice, ct_slice, COLOR_BGR2HSV);
-        // Ajuster la saturation dans le canal HSV si nécessaire
-
-        ///////////////////////////////////////////////////////////////////////////////////////////// ça là c'est super important pour uniformiser les couleurs et rendre les regions plus lisibles pour notre code
-            // Make colors more uniform (adjust saturation uniformly)
-            float saturationFactor = 1.5;  // Adjust as needed
-
-            // Split the image into channels
-            vector<Mat> channels;
-            split(ct_slice, channels);
-
-            // Adjust the saturation channel (index 1 in the HSV color space)
-            channels[1] = channels[1] * saturationFactor;
-
-            // Merge the channels back into the image
-            merge(channels, ct_slice);
-        /////////////////////////////////////////////////////////////////////////////////////////////
-
-        cvtColor(ct_slice, ct_slice, COLOR_HSV2BGR);
-        
-        // Normalisation
-        normalize(ct_slice, ct_slice, 0, 255, NORM_MINMAX);
-        
-        // Égalisation de l'histogramme (si l'image est en niveaux de gris)
-        cvtColor(ct_slice, ct_slice, COLOR_BGR2GRAY);
-        equalizeHist(ct_slice, ct_slice);
-        
-        // Seuillage pour la segmentation
-        Mat binary_image;
-        threshold(ct_slice, binary_image, 0, 255, THRESH_BINARY);
-        
-        // Adaptive Thresholding
-        adaptiveThreshold(ct_slice, binary_image, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 11, 2);
-
-        // contours des objets - y a du potentiel on doit ameliorer ça        
-        vector<vector<Point>> contours;
-        findContours(binary_image, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-
-        // Filter out small contours
-        double minContourArea = 100.0;
-        for (const auto& contour : contours) {
-            double area = contourArea(contour);
-            if (area > minContourArea) {
-                // Process the contour
-                drawContours(ct_slice, vector<vector<Point>>{contour}, 0, Scalar(0, 255, 0), 2);
-            }
-        }
-        
-        // Morphological Operations
-        Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
-        morphologyEx(binary_image, binary_image, MORPH_CLOSE, kernel);
-
-
+        performKMeansSegmentation(ct_slice, ct_slice);
 
         // Clonez l'image pour travailler avec une copie
         colour_ct_slice = ct_slice.clone();
