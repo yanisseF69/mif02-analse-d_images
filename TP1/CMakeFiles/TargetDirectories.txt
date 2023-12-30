@@ -1,3 +1,0 @@
-/home/amine/Bureau/M1 S1/Image/TP1/mif02-image-analyse/TP1/CMakeFiles/tp1.dir
-/home/amine/Bureau/M1 S1/Image/TP1/mif02-image-analyse/TP1/CMakeFiles/edit_cache.dir
-/home/amine/Bureau/M1 S1/Image/TP1/mif02-image-analyse/TP1/CMakeFiles/rebuild_cache.dir
