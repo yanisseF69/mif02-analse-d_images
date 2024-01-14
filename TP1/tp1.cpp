@@ -7,43 +7,12 @@
 using namespace std;
 using namespace cv;
 
-class RegionGrowing
+class SplitAndMerge
 {
     private:
-        vector<pair<int, int>> seed_set;
         Mat ct_slice;
         Mat colour_ct_slice;
         RNG rng;
-
-        /** 
-         * Performs K-Means segmentation on the input image.
-         * 
-         * @param input_image The input image to be segmented.
-         * @param segmented_image The output segmented image.
-         */
-        void performKMeansSegmentation(const Mat& input_image, Mat& segmented_image) {
-            // TODO : faire du multi threading sur cette fonction car elle prend beaucoup de temps si on augmente k.
-            int k = 10; // Nombre de clusters (ajustable)
-
-            // Remodeler l'image en un tableau 2D de pixels
-            Mat reshaped_image = input_image.reshape(1, input_image.rows * input_image.cols);
-
-            // Convertir en type flottant pour K-means
-            reshaped_image.convertTo(reshaped_image, CV_32F);
-
-            // Clustering K-means
-            Mat labels, centers;
-            kmeans(reshaped_image, k, labels, TermCriteria(TermCriteria::EPS + TermCriteria::COUNT, 100, 0.2), 3, KMEANS_RANDOM_CENTERS, centers);
-
-            // Remodeler le résultat à la taille originale de l'image
-            Mat segmented_labels = labels.reshape(0, input_image.rows);
-
-            // Convertir les étiquettes segmentées en 8 bits pour la visualisation
-            segmented_labels.convertTo(segmented_image, CV_8U);
-
-            // Normaliser l'image segmentée dans la plage [0, 255]
-            normalize(segmented_image, segmented_image, 0, 255, NORM_MINMAX);
-        }
 
         /**
          * Performs region splitting and merging on the input color image.
@@ -114,36 +83,21 @@ class RegionGrowing
             return (diff_mean[0] <= tolerance && diff_mean[1] <= tolerance && diff_mean[2] <= tolerance);
         }
 
-        /**
-         * Generates a specified number of random seed points within the image dimensions.
-         * 
-         * @param numPoints The number of random seed points to generate.
-         */
-        void generateRandomSeedPoints(int numPoints) {
-            for (int i = 0; i < numPoints; ++i) {
-                int x = rand() % ct_slice.cols;
-                int y = rand() % ct_slice.rows;
-                seed_set.push_back(pair<int, int>(x, y));
-            }
-        }
-
-
-
 
     public:
 
         /**
-         * Constructor for the RegionGrowing class.
+         * Constructor for the SplitAndMerge class.
          * 
          * Initializes the instance with an input color image, generates seed points,
          * performs region growing segmentation, and displays the results.
          * 
          * @param image_path Path to the input color image.
          */
-        RegionGrowing(String image_path)
+        SplitAndMerge(String image_path)
         {
-            rng = RNG(12345);
             ct_slice = imread(image_path, IMREAD_COLOR);
+            rng = RNG(12345);
 
             if (ct_slice.empty())
             {
@@ -162,50 +116,7 @@ class RegionGrowing
             // imshow("CT slice", colour_ct_slice);
             // waitKey(0);
 
-            /* ------ generation des points tous les n pixels -------- /!\ pas optimal 
-                    // Automatically generate seed points at regular intervals
-                    int interval = 60; // Adjust the interval based on your preference
-                    for (int y = 0; y < ct_slice.rows; y += interval) {
-                        for (int x = 0; x < ct_slice.cols; x += interval) {
-                            seed_set.push_back(pair<int, int>(x, y));
-                        }
-                    }
-            */
 
-            // generate 100 seed points
-            /* 
-            generateRandomSeedPoints(10);
-
-            // Display seed points
-            for (const auto& seed : seed_set) {
-                Scalar color(rand() & 255, rand() & 255, rand() & 255);
-                circle(colour_ct_slice, Point(seed.first, seed.second), 4, color, FILLED);
-            }
-            imshow("CT slice", colour_ct_slice);
-            waitKey(0);
-
-            // Process each seed point separately
-            vector<Mat> segmented_regions;
-            for (size_t i = 0; i < seed_set.size(); ++i)
-            {
-                Mat segmented_image = regionGrowing(ct_slice, seed_set[i], 255, 2);
-                segmented_regions.push_back(segmented_image);
-            }
-            
-
-            // Display all segmented regions in one window with different colors
-            Mat all_regions = Mat::zeros(ct_slice.size(), CV_8UC3);
-            for (size_t i = 0; i < seed_set.size(); ++i)
-            {
-                Scalar color(rand() & 255, rand() & 255, rand() & 255);
-                bitwise_or(all_regions, Scalar(0, 0, 0), all_regions, segmented_regions[i] == 255);
-                bitwise_or(all_regions, color, all_regions, segmented_regions[i] == 255);
-            }
-
-            namedWindow("All Segmented Regions", WINDOW_AUTOSIZE);
-            imshow("All Segmented Regions", all_regions);
-            waitKey(0);
-            */
 
 
             // SPLIT AND MERGE  
@@ -218,6 +129,9 @@ class RegionGrowing
             // Mat rsm3 = regionSplittingAndMerging(ct_slice, Rect(0, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
             // Mat rsm4 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
             // Mat rsm_result = rsm1 + rsm2 + rsm3 + rsm4;
+
+            imshow("Region Splitting and Merging Before RandomColor", rsm1);
+
 
             Mat coloredImage(ct_slice.size(), CV_8UC3);
 
@@ -259,98 +173,24 @@ class RegionGrowing
         }
 
         /**
-         * Destructor for the RegionGrowing class.
+         * Destructor for the SplitAndMerge class.
          * 
          * This destructor is empty as there are no explicit resource allocations
-         * or clean-up operations to be performed when an instance of RegionGrowing is destroyed.
+         * or clean-up operations to be performed when an instance of SplitAndMerge is destroyed.
          */
-        ~RegionGrowing()
+        ~SplitAndMerge()
         {
         }
 
-        /**
-         * Callback function for mouse events, specifically handling left button down events.
-         * Adds the clicked point to the seed set and visualizes it on the image.
-         * 
-         * @param event The type of mouse event (e.g., EVENT_LBUTTONDOWN).
-         * @param x The x-coordinate of the mouse click.
-         * @param y The y-coordinate of the mouse click.
-         * @param flags Additional flags indicating the state of the mouse buttons and modifier keys.
-         * @param userdata A pointer to the RegionGrowing instance associated with the callback.
-         */
-        static void mouseCallback(int event, int x, int y, int flags, void *userdata)
-        {
-            RegionGrowing *instance = static_cast<RegionGrowing *>(userdata);
-
-            if (event == EVENT_LBUTTONDOWN)
-            {
-                instance->seed_set.push_back(pair<int, int>(x, y));
-
-                // Generate a unique color for each seed point
-                Scalar color(rand() & 255, rand() & 255, rand() & 255);
-                circle(instance->colour_ct_slice, Point(x, y), 4, color, FILLED);
-                imshow("CT slice", instance->colour_ct_slice);
-            }
-        }
-
-        /**
-         * Applies region growing algorithm starting from a seed point in the input image.
-         * 
-         * @param anImage The input image to be segmented.
-         * @param seedPoint The seed point for the region growing algorithm.
-         * @param anInValue The value to assign to the segmented region in the output matrix.
-         * @param tolerance The intensity difference tolerance for region growing.
-         * @return The matrix representing the segmented region using region growing.
-         */
-        Mat regionGrowing(const Mat &anImage,
-                          const pair<int, int> &seedPoint,
-                          unsigned char anInValue = 255,
-                          float tolerance = 5)
-        {
-            Mat visited_matrix = Mat::zeros(Size(anImage.cols, anImage.rows), CV_8UC1);
-            vector<pair<int, int>> point_list;
-            point_list.push_back(seedPoint);
-
-            while (!point_list.empty())
-            {
-                pair<int, int> this_point = point_list.back();
-                point_list.pop_back();
-
-                int x = this_point.first;
-                int y = this_point.second;
-                unsigned char pixel_value = anImage.at<unsigned char>(Point(x, y));
-
-                visited_matrix.at<unsigned char>(Point(x, y)) = anInValue;
-
-                for (int j = y - 1; j <= y + 1; ++j)
-                {
-                    if (0 <= j && j < anImage.rows)
-                    {
-                        for (int i = x - 1; i <= x + 1; ++i)
-                        {
-                            if (0 <= i && i < anImage.cols)
-                            {
-                                unsigned char neighbour_value = anImage.at<unsigned char>(Point(i, j));
-                                unsigned char neighbour_visited = visited_matrix.at<unsigned char>(Point(i, j));
-
-                                if (!neighbour_visited &&
-                                    fabs(neighbour_value - pixel_value) <= (tolerance / 100.0 * 255.0))
-                                {
-                                    point_list.push_back(pair<int, int>(i, j));
-                                    visited_matrix.at<unsigned char>(Point(i, j)) = anInValue;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            return visited_matrix;
-        }
+        
 };
+
+
+
 
 int main(int argc, char **argv)
 {
-    RegionGrowing rg("data/000451.jpg");
+    SplitAndMerge sm("data/000009.jpg");
+
     return 0;
 }
