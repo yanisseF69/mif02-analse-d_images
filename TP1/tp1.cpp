@@ -12,7 +12,6 @@ class SplitAndMerge
     private:
         Mat ct_slice;
         Mat colour_ct_slice;
-        RNG rng;
 
         /**
          * Performs region splitting and merging on the input color image.
@@ -22,7 +21,7 @@ class SplitAndMerge
          * @param tolerance The tolerance value for checking region homogeneity.
          * @return The processed color image after region splitting and merging.
          */
-        void processSubregion(const Mat& input_image, const Rect& region, float tolerance, Mat& output, RNG& rng) {
+        void processSubregion(const Mat& input_image, const Rect& region, float tolerance, Mat& output) {
             Mat region_of_interest = input_image(region);
 
             if (isHomogeneousColor(region_of_interest, tolerance)) {
@@ -41,29 +40,23 @@ class SplitAndMerge
 
                 std::vector<std::thread> threads;
 
-                for (int i = 0; i < 4; ++i) {
-                    threads.emplace_back([this, &input_image, &subregions, i, &tolerance, &output, &rng, random_color] {
-                        Mat subregion_mask = Mat::zeros(input_image.size(), CV_8UC1);
-                        rectangle(subregion_mask, subregions[i], Scalar(255), FILLED);
+                for (int i = 0; i < 4; ++i) { 
+                    Mat subregion_mask = Mat::zeros(input_image.size(), CV_8UC1);
+                    rectangle(subregion_mask, subregions[i], Scalar(255), FILLED);
 
-                        cv::Mat subregion_output = cv::Mat::zeros(input_image.size(), CV_8UC1);
+                    cv::Mat subregion_output = cv::Mat::zeros(input_image.size(), CV_8UC1);
 
-                        processSubregion(input_image, subregions[i], tolerance, subregion_output, rng);
+                    processSubregion(input_image, subregions[i], tolerance, subregion_output);
 
-                        bitwise_or(output, subregion_output, output);
-                    });
+                    bitwise_or(output, subregion_output, output);
                 }
 
-                // Attendre que tous les threads aient terminé
-                for (auto& thread : threads) {
-                    thread.join();
-                }
             }
         }
 
-        Mat regionSplittingAndMerging(const Mat& input_image, const Rect& region, float tolerance, RNG rng) {
-            Mat output = Mat::zeros(input_image.size(), CV_8UC1);
-            processSubregion(input_image, region, tolerance, output, rng);
+        Mat regionSplittingAndMerging(const Mat& input_image, const Rect& region, float tolerance, Mat & output) {
+            output = Mat::zeros(input_image.size(), CV_8UC1);
+            processSubregion(input_image, region, tolerance, output);
             return output;
         }
 
@@ -83,57 +76,10 @@ class SplitAndMerge
             return (diff_mean[0] <= tolerance && diff_mean[1] <= tolerance && diff_mean[2] <= tolerance);
         }
 
-
-    public:
-
         /**
-         * Constructor for the SplitAndMerge class.
-         * 
-         * Initializes the instance with an input color image, generates seed points,
-         * performs region growing segmentation, and displays the results.
-         * 
-         * @param image_path Path to the input color image.
-         */
-        SplitAndMerge(String image_path)
-        {
-            
-            ct_slice = imread(image_path, IMREAD_COLOR);
-            rng = RNG(12345);
-
-            if (ct_slice.empty())
-            {
-                cerr << "Could not open or find the image" << endl;
-                return; // No return -1; in a constructor
-            }
-
-            //performKMeansSegmentation(ct_slice, ct_slice);
-            Mat grayImage;
-            cvtColor(ct_slice, grayImage, COLOR_BGR2GRAY);
-
-            // Clonez l'image pour travailler avec une copie
-            colour_ct_slice = ct_slice.clone();
-
-            namedWindow("CT slice", WINDOW_AUTOSIZE);
-            // imshow("CT slice", colour_ct_slice);
-            // waitKey(0);
-
-
-            // SPLIT AND MERGE  
-            // Apply region splitting and merging on the whole image
-            namedWindow("Region Splitting and Merging Result", WINDOW_AUTOSIZE);
-            // imshow("Region Splitting and Merging Result", rsm_result);
-            // waitKey(0);
-            Mat rsm1 = regionSplittingAndMerging(grayImage, Rect(0, 0, ct_slice.cols, ct_slice.rows), 2, rng);
-            // Mat rsm2 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, 0, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
-            // Mat rsm3 = regionSplittingAndMerging(ct_slice, Rect(0, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
-            // Mat rsm4 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
-            // Mat rsm_result = rsm1 + rsm2 + rsm3 + rsm4;
-
-            imshow("Region Splitting and Merging Before RandomColor", rsm1);
-
-
-            Mat coloredImage(ct_slice.size(), CV_8UC3);
-
+         * Attribue des couleurs aléatoires à chaque région.
+        */
+        void colorizeMergedImage(Mat input, Mat & coloredImage) {
             // Utiliser une table de hachage pour stocker les couleurs attribuées à chaque région
             unordered_map<int, Vec3b> colorMap;
 
@@ -141,7 +87,7 @@ class SplitAndMerge
             for (int i = 0; i < ct_slice.rows; ++i) {
                 for (int j = 0; j < ct_slice.cols; ++j) {
                     // Récupérer la valeur de pixel de l'image segmentée (remplacer cela avec votre propre logique de segmentation)
-                    int label = rsm1.at<uchar>(i, j);
+                    int label = input.at<uchar>(i, j);
                     for(int k = -20; k <= 20; k++ ) {
                         if (colorMap.find(label + k) != colorMap.end()){
                             label = label + k;
@@ -159,9 +105,69 @@ class SplitAndMerge
                     coloredImage.at<Vec3b>(i, j) = colorMap[label];
                 }
             }
+        }
 
+
+    public:
+
+        /**
+         * Constructor for the SplitAndMerge class.
+         * 
+         * Initializes the instance with an input color image, generates seed points,
+         * performs region growing segmentation, and displays the results.
+         * 
+         * @param image_path Path to the input color image.
+         */
+        SplitAndMerge(String image_path)
+        {
+            
+            ct_slice = imread(image_path, IMREAD_COLOR);
+
+            if (ct_slice.empty())
+            {
+                cerr << "Could not open or find the image" << endl;
+                return; // No return -1; in a constructor
+            }
+
+            //performKMeansSegmentation(ct_slice, ct_slice);
+            Mat grayImage;
+            cvtColor(ct_slice, grayImage, COLOR_BGR2GRAY);
+
+            // Clonez l'image pour travailler avec une copie
+            colour_ct_slice = ct_slice.clone();
+
+            namedWindow("CT slice", WINDOW_AUTOSIZE);
+            imshow("CT slice", colour_ct_slice);
+            // waitKey(0);
+
+
+            // SPLIT AND MERGE  
+            // Apply region splitting and merging on the whole image
+            namedWindow("Region Splitting and Merging Result", WINDOW_AUTOSIZE);
+            // imshow("Region Splitting and Merging Result", rsm_result);
+            
+            // waitKey(0);
+            std::vector<std::thread> threads;
+            Mat rsm1, rsm2, rsm3, rsm4;
+
+            threads.emplace_back(thread(&SplitAndMerge::regionSplittingAndMerging, this, ref(grayImage), Rect(0, 0, ct_slice.cols/2, ct_slice.rows/2), 2, ref(rsm1)));
+            threads.emplace_back(thread(&SplitAndMerge::regionSplittingAndMerging, this, ref(grayImage), Rect(ct_slice.cols/2, 0, ct_slice.cols/2, ct_slice.rows/2), 2, ref(rsm2)));
+            threads.emplace_back(thread(&SplitAndMerge::regionSplittingAndMerging, this, ref(grayImage), Rect(0, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 2, ref(rsm3)));
+            threads.emplace_back(thread(&SplitAndMerge::regionSplittingAndMerging, this, ref(grayImage), Rect(ct_slice.cols/2, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 2, ref(rsm4)));
+
+            for (auto& t: threads) {
+                t.join();
+            }
+
+            Mat rsm_result = rsm1 + rsm2 + rsm3 + rsm4;
+
+            imshow("Region Splitting and Merging Before RandomColor", rsm_result);
+
+
+            Mat coloredImage(ct_slice.size(), CV_8UC3);
+            colorizeMergedImage(rsm_result, coloredImage);
+            
             imshow("Region Splitting and Merging Result", coloredImage );
-            waitKey(0);
 
             Mat borders;
             Canny(coloredImage, borders, 30, 60);
