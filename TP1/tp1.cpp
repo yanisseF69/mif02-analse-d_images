@@ -2,6 +2,7 @@
 #include <vector>
 #include <cmath>
 #include <opencv2/opencv.hpp>
+#include <thread>
 
 using namespace std;
 using namespace cv;
@@ -12,6 +13,7 @@ class RegionGrowing
         vector<pair<int, int>> seed_set;
         Mat ct_slice;
         Mat colour_ct_slice;
+        RNG rng;
 
         /** 
          * Performs K-Means segmentation on the input image.
@@ -51,9 +53,7 @@ class RegionGrowing
          * @param tolerance The tolerance value for checking region homogeneity.
          * @return The processed color image after region splitting and merging.
          */
-        Mat regionSplittingAndMergingColor(const Mat& input_image, const Rect& region, float tolerance) {
-            
-            Mat output = Mat::zeros(input_image.size(), CV_8UC3);
+        void processSubregion(const Mat& input_image, const Rect& region, float tolerance, Mat& output, RNG rng) {
             Mat region_of_interest = input_image(region);
 
             if (isHomogeneousColor(region_of_interest, tolerance)) {
@@ -67,17 +67,31 @@ class RegionGrowing
                 subregions[2] = Rect(region.x, region.y + region.height / 2, region.width / 2, region.height / 2);
                 subregions[3] = Rect(region.x + region.width / 2, region.y + region.height / 2, region.width / 2, region.height / 2);
 
-                std::cout << "regionSplittingAndMergingColor is loading..." << std::endl; // TODO : faire du multi threading sur cette fonction car elle prend beaucoup de temps si on réduit la tolerance.
+                std::vector<std::thread> threads;
+
                 for (int i = 0; i < 4; ++i) {
-                    Mat subregion_mask = Mat::zeros(input_image.size(), CV_8UC1);
-                    rectangle(subregion_mask, subregions[i], Scalar(255), FILLED);
+                    threads.emplace_back([this, &input_image, &subregions, i, &tolerance, &output, rng] {
+                        Mat subregion_mask = Mat::zeros(input_image.size(), CV_8UC1);
+                        rectangle(subregion_mask, subregions[i], Scalar(255), FILLED);
 
-                    Mat subregion_output = regionSplittingAndMergingColor(input_image, subregions[i], tolerance);
+                        cv::Mat subregion_output = cv::Mat::zeros(input_image.size(), CV_8UC3);
 
-                    bitwise_or(output, subregion_output, output, subregion_mask);
+                        processSubregion(input_image, subregions[i], tolerance, subregion_output, rng);
+                        
+                        bitwise_or(output, subregion_output, output, subregion_mask);
+                    });
+                }
+
+                // Attendre que tous les threads aient terminé
+                for (auto& thread : threads) {
+                    thread.join();
                 }
             }
+        }
 
+        Mat regionSplittingAndMerging(const Mat& input_image, const Rect& region, float tolerance, RNG rng) {
+            Mat output = Mat::zeros(input_image.size(), CV_8UC3);
+            processSubregion(input_image, region, tolerance, output, rng);
             return output;
         }
 
@@ -111,6 +125,8 @@ class RegionGrowing
         }
 
 
+
+
     public:
 
         /**
@@ -123,6 +139,7 @@ class RegionGrowing
          */
         RegionGrowing(String image_path)
         {
+            rng = RNG(12345);
             ct_slice = imread(image_path, IMREAD_COLOR);
 
             if (ct_slice.empty())
@@ -137,8 +154,8 @@ class RegionGrowing
             colour_ct_slice = ct_slice.clone();
 
             namedWindow("CT slice", WINDOW_AUTOSIZE);
-            imshow("CT slice", colour_ct_slice);
-            waitKey(0);
+            // imshow("CT slice", colour_ct_slice);
+            // waitKey(0);
 
             /* ------ generation des points tous les n pixels -------- /!\ pas optimal 
                     // Automatically generate seed points at regular intervals
@@ -188,11 +205,16 @@ class RegionGrowing
 
             // SPLIT AND MERGE  
             // Apply region splitting and merging on the whole image
-            Mat rsm_result = regionSplittingAndMergingColor(ct_slice, Rect(0, 0, ct_slice.cols, ct_slice.rows), 5);
             namedWindow("Region Splitting and Merging Result", WINDOW_AUTOSIZE);
+            // imshow("Region Splitting and Merging Result", rsm_result);
+            // waitKey(0);
+            Mat rsm1 = regionSplittingAndMerging(ct_slice, Rect(0, 0, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
+            Mat rsm2 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, 0, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
+            Mat rsm3 = regionSplittingAndMerging(ct_slice, Rect(0, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
+            Mat rsm4 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
+            Mat rsm_result = rsm1 + rsm2 + rsm3 + rsm4;
             imshow("Region Splitting and Merging Result", rsm_result);
             waitKey(0);
-
             destroyAllWindows();
         }
 
