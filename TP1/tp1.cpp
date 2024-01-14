@@ -96,6 +96,7 @@ class SplitAndMerge
          */
         SplitAndMerge(String image_path)
         {
+            
             ct_slice = imread(image_path, IMREAD_COLOR);
             rng = RNG(12345);
 
@@ -117,14 +118,12 @@ class SplitAndMerge
             // waitKey(0);
 
 
-
-
             // SPLIT AND MERGE  
             // Apply region splitting and merging on the whole image
             namedWindow("Region Splitting and Merging Result", WINDOW_AUTOSIZE);
             // imshow("Region Splitting and Merging Result", rsm_result);
             // waitKey(0);
-            Mat rsm1 = regionSplittingAndMerging(grayImage, Rect(0, 0, ct_slice.cols, ct_slice.rows), 5, rng);
+            Mat rsm1 = regionSplittingAndMerging(grayImage, Rect(0, 0, ct_slice.cols, ct_slice.rows), 2, rng);
             // Mat rsm2 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, 0, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
             // Mat rsm3 = regionSplittingAndMerging(ct_slice, Rect(0, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
             // Mat rsm4 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
@@ -190,7 +189,8 @@ class SplitAndMerge
 
 int main(int argc, char **argv)
 {
-    SplitAndMerge sm("data/000009.jpg");
+    SplitAndMerge sm1("data/000009.jpg");
+    SplitAndMerge sm2("data/000451.jpg");
 
     return 0;
 }
