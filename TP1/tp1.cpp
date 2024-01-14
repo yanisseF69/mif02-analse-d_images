@@ -53,32 +53,35 @@ class RegionGrowing
          * @param tolerance The tolerance value for checking region homogeneity.
          * @return The processed color image after region splitting and merging.
          */
-        void processSubregion(const Mat& input_image, const Rect& region, float tolerance, Mat& output, RNG rng) {
+        void processSubregion(const Mat& input_image, const Rect& region, float tolerance, Mat& output, RNG& rng) {
             Mat region_of_interest = input_image(region);
 
             if (isHomogeneousColor(region_of_interest, tolerance)) {
-                // If the region is homogeneous, fill it with the mean intensity
+                // Si la région est homogène, la remplir avec une couleur aléatoire
                 output(region) = mean(region_of_interest);
             } else {
-                // If not, split the region into four quadrants and recursively process them
+                // Sinon, diviser la région en quatre quadrants et les traiter de manière récursive
                 Rect subregions[4];
                 subregions[0] = Rect(region.x, region.y, region.width / 2, region.height / 2);
                 subregions[1] = Rect(region.x + region.width / 2, region.y, region.width / 2, region.height / 2);
                 subregions[2] = Rect(region.x, region.y + region.height / 2, region.width / 2, region.height / 2);
                 subregions[3] = Rect(region.x + region.width / 2, region.y + region.height / 2, region.width / 2, region.height / 2);
 
+                // Générer une couleur aléatoire pour ce niveau de segmentation
+                Scalar random_color(rand() % 256, rand() % 256, rand() % 256);
+
                 std::vector<std::thread> threads;
 
                 for (int i = 0; i < 4; ++i) {
-                    threads.emplace_back([this, &input_image, &subregions, i, &tolerance, &output, rng] {
+                    threads.emplace_back([this, &input_image, &subregions, i, &tolerance, &output, &rng, random_color] {
                         Mat subregion_mask = Mat::zeros(input_image.size(), CV_8UC1);
                         rectangle(subregion_mask, subregions[i], Scalar(255), FILLED);
 
-                        cv::Mat subregion_output = cv::Mat::zeros(input_image.size(), CV_8UC3);
+                        cv::Mat subregion_output = cv::Mat::zeros(input_image.size(), CV_8UC1);
 
                         processSubregion(input_image, subregions[i], tolerance, subregion_output, rng);
-                        
-                        bitwise_or(output, subregion_output, output, subregion_mask);
+
+                        bitwise_or(output, subregion_output, output);
                     });
                 }
 
@@ -90,7 +93,7 @@ class RegionGrowing
         }
 
         Mat regionSplittingAndMerging(const Mat& input_image, const Rect& region, float tolerance, RNG rng) {
-            Mat output = Mat::zeros(input_image.size(), CV_8UC3);
+            Mat output = Mat::zeros(input_image.size(), CV_8UC1);
             processSubregion(input_image, region, tolerance, output, rng);
             return output;
         }
@@ -149,6 +152,8 @@ class RegionGrowing
             }
 
             //performKMeansSegmentation(ct_slice, ct_slice);
+            Mat grayImage;
+            cvtColor(ct_slice, grayImage, COLOR_BGR2GRAY);
 
             // Clonez l'image pour travailler avec une copie
             colour_ct_slice = ct_slice.clone();
@@ -208,13 +213,48 @@ class RegionGrowing
             namedWindow("Region Splitting and Merging Result", WINDOW_AUTOSIZE);
             // imshow("Region Splitting and Merging Result", rsm_result);
             // waitKey(0);
-            Mat rsm1 = regionSplittingAndMerging(ct_slice, Rect(0, 0, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
-            Mat rsm2 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, 0, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
-            Mat rsm3 = regionSplittingAndMerging(ct_slice, Rect(0, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
-            Mat rsm4 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
-            Mat rsm_result = rsm1 + rsm2 + rsm3 + rsm4;
-            imshow("Region Splitting and Merging Result", rsm_result);
+            Mat rsm1 = regionSplittingAndMerging(grayImage, Rect(0, 0, ct_slice.cols, ct_slice.rows), 5, rng);
+            // Mat rsm2 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, 0, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
+            // Mat rsm3 = regionSplittingAndMerging(ct_slice, Rect(0, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
+            // Mat rsm4 = regionSplittingAndMerging(ct_slice, Rect(ct_slice.cols/2, ct_slice.rows/2, ct_slice.cols/2, ct_slice.rows/2), 5, rng);
+            // Mat rsm_result = rsm1 + rsm2 + rsm3 + rsm4;
+
+            Mat coloredImage(ct_slice.size(), CV_8UC3);
+
+            // Utiliser une table de hachage pour stocker les couleurs attribuées à chaque région
+            unordered_map<int, Vec3b> colorMap;
+
+            // Parcourir chaque pixel de l'image segmentée
+            for (int i = 0; i < ct_slice.rows; ++i) {
+                for (int j = 0; j < ct_slice.cols; ++j) {
+                    // Récupérer la valeur de pixel de l'image segmentée (remplacer cela avec votre propre logique de segmentation)
+                    int label = rsm1.at<uchar>(i, j);
+                    for(int k = -20; k <= 20; k++ ) {
+                        if (colorMap.find(label + k) != colorMap.end()){
+                            label = label + k;
+                            break;
+                        } 
+                    }
+
+                    // Vérifier si la couleur a déjà été attribuée à cette région
+                    if (colorMap.find(label) == colorMap.end()) {
+                        // Si la couleur n'a pas encore été attribuée, attribuer une couleur aléatoire
+                        colorMap[label] = Vec3b(rand() % 256, rand() % 256, rand() % 256);
+                    }
+
+                    // Attribuer la couleur de la région au pixel correspondant dans l'image résultante
+                    coloredImage.at<Vec3b>(i, j) = colorMap[label];
+                }
+            }
+
+            imshow("Region Splitting and Merging Result", coloredImage );
             waitKey(0);
+
+            Mat borders;
+            Canny(coloredImage, borders, 30, 60);
+            imshow("Region Borders", borders);
+            waitKey(0);
+
             destroyAllWindows();
         }
 
